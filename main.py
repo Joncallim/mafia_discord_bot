@@ -7,6 +7,9 @@ Created on Fri May 15 21:33:02 2020
 This is the Mafia bot source code.
 """
 
+import sys
+# Needed to make sure the going up a level in the file manager works.
+sys.path.append('../')
 import discord
 import random
 import json
@@ -19,7 +22,7 @@ import nest_asyncio
 nest_asyncio.apply()
 
 
-with open('bot_codes.json', 'r') as file:
+with open('../secret/bot_codes.json', 'r') as file:
     codes = json.load(file)
 
 TOKEN = codes.get('token')
