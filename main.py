@@ -11,7 +11,6 @@ import sys
 # Needed to make sure the going up a level in the file manager works.
 sys.path.append('../')
 import discord
-import random
 import json
 
 
@@ -22,7 +21,7 @@ import nest_asyncio
 nest_asyncio.apply()
 
 
-with open('../secret/bot_codes.json', 'r') as file:
+with open('../werewolf_secret/bot_codes.json', 'r') as file:
     codes = json.load(file)
 
 TOKEN = codes.get('token')
@@ -30,13 +29,37 @@ TOKEN = codes.get('token')
 
 bot = commands.Bot(command_prefix = '/')
 
-bot.daytime = True
+bot.host_message_check = {}
+bot.game_list = {}
+
+# bot.test_player_list = {111: {'role': 'not_playing', 'name': 'test_player_1'}, 
+#                         222: {'role': 'not_playing', 'name': 'test_player_2'}, 
+#                         333: {'role': 'not_playing', 'name': 'test_player_3'}, 
+#                         123: {'role': 'player', 'name': 'test_player_4'}, 
+#                         234: {'role': 'player', 'name': 'test_player_5'}, 
+#                         456: {'role': 'player', 'name': 'test_player_6'}, 
+#                         786: {'role': 'player', 'name': 'test_player_7'}, 
+#                         112: {'role': 'player', 'name': 'test_player_8'}, 
+#                         874: {'role': 'player', 'name': 'test_player_9'}, 
+#                         987: {'role': 'player', 'name': 'test_player_10'}, 
+#                         445: {'role': 'player', 'name': 'test_player_11'}, 
+#                         213: {'role': 'player', 'name': 'test_player_12'}, 
+#                         334: {'role': 'player', 'name': 'test_player_13'}}
 
 @bot.event
 async def on_ready():
     print(f'{bot.user.name} has connected to Discord!')
     for guild in bot.guilds:
         print(f'Mafia Bot is now connected to {guild.name}.')
+
+# Clears stuff out from memory - cleans every file in the server. Will add a
+# check to make sure only I can do this in a bit.
+@bot.command(help = "Scrubs memory.")
+async def scrub(ctx):
+    bot.daytime = True
+    bot.host_message_check = {}
+    bot.player_list = {}
+    print('Storage has been cleared')
 
 @bot.command(help = "Loads extensions.")
 async def load(ctx, extension):
@@ -67,8 +90,3 @@ for filename in os.listdir('./cogs'):
         bot.load_extension(f'cogs.{filename[:-3]}')
 
 bot.run(TOKEN)
-
-# Send data to DM
-# user = bot.get_user(ctx.author.id)
-# bot.dm_id = user
-# await user.send('Initiative Starts!')
