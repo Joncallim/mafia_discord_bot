@@ -3,7 +3,9 @@
 
 ---
 #### Yet Another Werewolf Bot...
-I decided that there weren't enough Werewolf Bots out there, so I've made my own Discord bot for werewolf. This was a bit of a handling-data challenge, and this bot will work across multiple Discord servers simultaneously once I deploy it for actual use. 
+I decided that there weren't enough Werewolf Bots out there, so I've made my own Discord bot for werewolf. This was a bit of a handling-data challenge, and this bot will work across multiple Discord servers. 
+
+Currently deployed on Google Cloud Compute, if you run into any issues please leave a comment on the github server or drop me a dm.
 
 Current roles are (and I *am* planning to add more in the near future):
 
