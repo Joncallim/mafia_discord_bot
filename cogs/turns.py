@@ -9,6 +9,7 @@ Created on Sun May 17 12:51:55 2020
 import discord
 from discord.ext import commands
 import numpy as np
+import random
 
 class turns(commands.Cog):
     
@@ -16,8 +17,103 @@ class turns(commands.Cog):
         self.bot = bot
         self.kill_message = {}
         self.target_list = {}
-        
-        
+        # Format for the strings:
+        # Night phase: [night_scene_setting] [werewolf_hunting] [night_advice]
+        # Werewolf Kill: [night_initial] victim [victim_action_desc] when [werewolf_desc] [werewolf_attack_desc]
+        # Werewolf no-Kill:  [night_initial] [no_kill_desc][no_kill_variant]
+        # daybreak: [daybreak] [other details (next line)]
+        self.scenes = {"night_initial": ["It was a dark and stormy night.",
+                                         "The moon was high in the sky."],
+                       # werewolf descriptor will be appended onto after the 
+                       # victim descriptor, so no punctuation at the end.
+                       "werewolf_desc": ["a pack of wild werewolves",
+                                         "a vicious pack of wild animals"],
+                       "victim_action_desc": ["was out for a midnight stroll",
+                                              "had just left home to visit grandma"],
+                       "werewolf_attack_desc": ["attacked!",
+                                                "ambushed!"],
+                       "no_kill_desc": ["The village was really serene",
+                                        "Nothing really happened last night"],
+                       "no_kill_variant": ["...",
+                                           ", except for the blacksmith working till midnight.",
+                                           ", and everyone got lots of sleep."],
+                       "daybreak": ["The sun rises over the little village.",
+                                    "The village rooster crows on time, as usual."],
+                       "werewolf_hunting": ["The werewolves are on the hunt!",
+                                            "Wild creatures roam the night!"],
+                       "night_advice": ["Lock your doors!",
+                                        "Stay inside!"],
+                       "night_scene_setting": ["It is now night-time...",
+                                               "The sun sets on another day in village-ville..."]
+                       }
+    
+    # This creates a nice little random sequence of text for werewolf kills.
+    async def werewolf_kill(self, guild_id, kill_list):
+        # First check for more than 1 victim:
+        initString = random.choice(self.scenes['night_initial'])
+        # Sets the status of stop_game so that the game won't just kill itself
+        # if no victory conditions are met in this function.
+        stop_game = False
+        kill_str = "{}\n\n".format(initString)
+        formal_kills = ""
+        # As long as at least one person was killed, creates a random sequence
+        # of strings that should make sense. It'll append each victim's name to
+        # the kill.
+        if len(kill_list) > 0:
+            for victim_id in kill_list:
+                kill_str = "{}{} {}, when {} {}\n\n".format(kill_str,
+                                                             self.bot.game_list[guild_id]["active"][victim_id]['name'],
+                                                             random.choice(self.scenes['victim_action_desc']),
+                                                             random.choice(self.scenes['werewolf_desc']),
+                                                             random.choice(self.scenes['werewolf_attack_desc']))
+                # Kills the player and returns two booleans: The first tells
+                # you if it's a game-ending kill, the second tells you who's
+                # victory it is. A small flaw is that 
+                game_end, werewolf_victory = await self.kill_player(guild_id, victim_id)
+                # Saves the game-ending values here. The final player killed 
+                # could be a werewolf, for example, and that wouldn't trigger
+                # the game ending conditions the same way.
+                if (game_end == True) & (stop_game == False):
+                    stop_game = True
+                    ww_vic = werewolf_victory
+                # Just an itemized list of players who have been killed. Shows up
+                # every time in case you don't want to read the long text above it.
+                formal_kills = "{}\n - {}".format(formal_kills,
+                                                  self.bot.game_list[guild_id]["active"][victim_id]['name'])
+        # Nobody killed - brings up some normal-ish text
+        elif len(kill_list) == 0:
+            kill_str = "{}{}{}".format(kill_str,
+                                       random.choice(self.scenes['no_kill_desc']),
+                                       random.choice(self.scenes['no_kill_variant']))
+        # If the game is finished from a werewolf kill, moves into the end-of-
+        # game sequence, sending two messages (one for the werewolf kill, another
+        # for the EOG).
+        if stop_game:
+            outputString = "```{}The following players have been killed:{}```".format(kill_str,
+                                                                                      formal_kills)
+            await self.send_message_general(guild_id, outputString)
+            await self.game_end(guild_id, ww_vic)
+        else:
+            dayString = "{}{}\n\n".format(kill_str,
+                                          random.choice(self.scenes['daybreak']))
+            # Changes status to day, prints some info on what to do now.
+            live_player_string = self.set_day(guild_id)
+            outputString = "```{}The following players have been killed:\n - {}\n\n{}```".format(dayString,
+                                                                                           formal_kills,
+                                                                                           live_player_string)
+            
+            await self.send_message_general(guild_id, outputString)
+    
+    # Small function to send a message on the general channel, from just the 
+    # guild id.
+    async def send_message_general(self, guild_id, message):
+        guild = self.bot.get_guild(guild_id)
+        general_channel = guild.get_channel(self.bot.game_list[guild_id]["channel_ids"]["general"])
+        await general_channel.send(message)
+        pass
+    
+    # Game ending. Prints all the important EOG info, and clears memory of the
+    # game.    
     async def game_end(self, guild_id, werewolf_victory = True):
         if werewolf_victory:
             firstString = "Werewolves win!"
@@ -63,7 +159,9 @@ class turns(commands.Cog):
         # As the last thing done, clears the memory of this game.
         self.bot.game_list.pop(guild_id)
         print('Game terminated in server: {}'.format(guild_id))
-        
+    
+    # Return True for game ending, False for game continuing. Second condition
+    # is the werewolf victory. True means the werewolves win.
     async def kill_player(self, guild_id, player_id):
         # Updates the player's status to dead, and changes the counters
         # that store the number of live and dead players.
@@ -77,33 +175,33 @@ class turns(commands.Cog):
             self.bot.game_list[guild_id]["player_numbers"]["werewolves_live"] = self.bot.game_list[guild_id]["player_numbers"]["werewolves_live"] - 1
             if self.bot.game_list[guild_id]["player_numbers"]["werewolves_live"] == 0:
                 self.bot.game_list[guild_id]["playing"] = False
-                await self.game_end(guild_id, werewolf_victory = False)
+                return True, False
                 pass
         elif self.bot.game_list[guild_id]["active"][player_id]["role"] == "Villager":
             self.bot.game_list[guild_id]["player_numbers"]["villagers_live"] = self.bot.game_list[guild_id]["player_numbers"]["villagers_live"] - 1
             if self.bot.game_list[guild_id]["player_numbers"]["villagers_live"] == 0:
                 self.bot.game_list[guild_id]["playing"] = False
-                await self.game_end(guild_id)
+                return True, True
                 pass
-        return
+        return False, False
         
     async def set_night(self, guild):
         # Updating the current time-of-day and turn counter.
         self.bot.game_list[guild.id]["day"] = False
         self.bot.game_list[guild.id]["turn"] = self.bot.game_list[guild.id]["turn"] + 1
         general_channel = guild.get_channel(self.bot.game_list[guild.id]["channel_ids"]["general"])
-        await general_channel.send("```It is now night time...```")
+        await general_channel.send("```{} {} {}```".format(random.choice(self.scenes['night_scene_setting']),
+                                                           random.choice(self.scenes['werewolf_hunting']),
+                                                           random.choice(self.scenes['night_advice'])))
         await self.werewolf_victim_send(guild)
         pass
     
-    async def set_day(self, guild):
-        self.bot.game_list[guild.id]["day"] = True
-        general_channel = guild.get_channel(self.bot.game_list[guild.id]["channel_ids"]["general"])
-        
+    def set_day(self, guild_id):
+        self.bot.game_list[guild_id]["day"] = True        
         live_list = []
         # Getting the status of each player, and if they're alive, moving them
         # into this list of live players.
-        for key, player in self.bot.game_list[guild.id]['active'].items():
+        for key, player in self.bot.game_list[guild_id]['active'].items():
             if (player['status'] == 'alive'):
                 live_list.append(player['name'])
         # Creating a string to print all live targets to display for werewolves
@@ -111,8 +209,8 @@ class turns(commands.Cog):
         live_string = ""
         for i, target in enumerate(live_list):
             live_string = "{} {}. {}\n".format(live_string, i+1, target)
-        await general_channel.send("```It is now daytime. Turn Number: {}. Total players remaining: {}\n{}\nYou can now nominate one player to kill, by typing [/kill @player], by mentioning the player in general chat. You can only nominate one player, so choose well.```".format(self.bot.game_list[guild.id]["turn"], self.bot.game_list[guild.id]["player_numbers"]["alive"], live_string))
-        pass
+        live_player_string = ("Turn Number: {}. Total players remaining: {}\n{}\nYou can now nominate one player to kill, by typing [/kill @player], by mentioning the player in general chat. You can only nominate one player, so choose well.".format(self.bot.game_list[guild_id]["turn"], self.bot.game_list[guild_id]["player_numbers"]["alive"], live_string))
+        return live_player_string
     
     async def update_werewolf_victims(self, guild_id, werewolf_name, target_number):
         target_id = self.target_list[guild_id]["target_ids"][target_number]
@@ -125,28 +223,26 @@ class turns(commands.Cog):
             werewolf_votes = list(self.target_list[guild_id]['votes'].values())
             # Gets rid of storage for this instance of the werewolf votes.
             self.target_list.pop(guild_id)
+            # Creates and empty werewolf kill list. This will be populated with
+            # successful kills, and passed to another function to create a nice
+            # string for printing. This uses player_ids, so no confusion and
+            # quick indexing.
+            werewolf_kill_list = []
+            # Gets the number of each vote made by the werewolves, and counts
+            # the number of unique votes. Repeated votes obviously get counted
+            # multiple times.
             victims, victim_votes = np.unique(werewolf_votes, return_counts = True)
-            guild = self.bot.get_guild(guild_id)
-            general_channel = guild.get_channel(self.bot.game_list[guild_id]["channel_ids"]["general"])
+            # Getting the guild and general channel to send. May not need.
             for victim, votes in zip(victims, victim_votes):
                 if (self.bot.game_list[guild_id]["player_numbers"]["werewolves_live"] > 3) & (votes > 2):
-                    await general_channel.send("```The werewolves killed {} in the night!```".format(self.bot.game_list[guild_id]["active"][victim]['name']))
-                    await self.kill_player(guild_id, target_id)
+                    werewolf_kill_list.append(victim)
                 elif (self.bot.game_list[guild_id]["player_numbers"]["werewolves_live"] == 2) & (self.bot.game_list[guild_id]["player_numbers"]["werewolves_live"] == 3) & (votes > 1):
-                    await general_channel.send("```The werewolves killed {} in the night!```".format(self.bot.game_list[guild_id]["active"][victim]['name']))
-                    await self.kill_player(guild_id, target_id)
+                    werewolf_kill_list.append(victim)
                 elif (self.bot.game_list[guild_id]["player_numbers"]["werewolves_live"] == 1):
-                    await general_channel.send("```The werewolves killed {} in the night!```".format(self.bot.game_list[guild_id]["active"][victim]['name']))
-                    await self.kill_player(guild_id, target_id)
-                else:
-                    await general_channel.send("```Werewolves really need to get their act together...```")
-            if guild_id in self.bot.game_list:
-                if self.bot.game_list[guild_id]["playing"] == True:
-                    await self.set_day(guild)
+                    werewolf_kill_list.append(victim)
+            await self.werewolf_kill(guild_id, werewolf_kill_list)
             
     async def werewolf_victim_send(self, guild):
-        general_channel = guild.get_channel(self.bot.game_list[guild.id]["channel_ids"]["general"])
-        await general_channel.send("```Werewolves are choosing who to kill!```")
         live_target_list = []
         live_target_id_list = []
         # Getting the status of each player, and if they're alive, moving them
@@ -177,8 +273,6 @@ class turns(commands.Cog):
         elif (kill_votes == 0) & (no_kill_votes > 0): 
             finalString = '```{}\nNobody voted to kill {}!```'.format(initialString, player_name)
         return finalString
-        
-        
     
     async def end_voting(self, guild_id):
         kill_details = self.kill_message.pop(guild_id, None)
@@ -212,10 +306,16 @@ class turns(commands.Cog):
                 # game how many werewolves left).
                 initialString = 'The mob voted to execute {}, and killed him!\nTotal Votes: {}'.format(player_name, total_votes)
                 finalString = self.get_mob_kill_string(initialString, player_name, kill_votes, no_kill_votes, kill_details)
-                # printing the lynch text.
-                await general_channel.send(finalString)
                 # Kills player - Can end game here if needed!
-                await self.kill_player(guild_id, player_id)
+                game_end, werewolf_victory = await self.kill_player(guild_id, player_id)
+                # Only one iteration of this will happen, so no need to save the
+                # value of game_end earlier.
+                if game_end:
+                    # printing the lynch text.
+                    await general_channel.send(finalString)
+                    await self.game_end(guild_id, werewolf_victory)
+                else:
+                    await general_channel.send(finalString)
                 pass
             else:
                 # String for a failed lynch.
@@ -234,7 +334,9 @@ class turns(commands.Cog):
             if ctx.author.id in self.bot.game_list[ctx.guild.id]['active'].keys():
                 self.bot.game_list[ctx.guild.id]['day'] = False
                 self.bot.game_list[ctx.guild.id]['turn'] = 1
-                await ctx.send("```Beginning the first night phase!```")
+                
+                await ctx.send("```Beginning the first night! {} {}```".format(random.choice(self.scenes['werewolf_hunting']),
+                                                                               random.choice(self.scenes['night_advice'])))
                 await self.werewolf_victim_send(ctx.guild)
             else:
                 await ctx.send("```You are not part of the game, {}!```".format(ctx.author.display_name))
