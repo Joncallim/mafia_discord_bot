@@ -2,7 +2,7 @@
 ## Written for Discord in discord.py
 
 ---
-####Yet Another Werewolf Bot...
+#### Yet Another Werewolf Bot...
 I decided that there weren't enough Werewolf Bots out there, so I've made my own Discord bot for werewolf. This was a bit of a handling-data challenge, and this bot will work across multiple Discord servers simultaneously once I deploy it for actual use. 
 
 Current roles are (and I *am* planning to add more in the near future):
@@ -25,7 +25,7 @@ Due to Discord Permissions, the channel owner will always be able to see this, a
 Once everyone has their roles and you're ready to start playing, type `[/start]`. The first night will then start, so any discussion would have had to happen before that. The werewolves will then decide who to kill.
 
 ---
-####Lynching:
+#### Lynching:
 
 If you're a werewolf, you'll have the option to kill live players. You can do this by typing `/kill 1` for a list of players that will be shown to you. As a werewolf, you only have 1 vote, and voting to kill multiple times will just overwrite your previous vote.
 
@@ -40,13 +40,13 @@ During the day phase, you can type `[/kill @player]`, with a `mention` to nomina
 Votes are made public once they're successful or unsuccessful, so werewolves can't just immediately nominate someone and try to lynch him.
 
 ---
-####Planned Work:
+#### Planned Work:
 - Introduce `Medic` class
 - Tidy up this README
 - Make nicer text for the bot.
 
 ---
-####Links: 
+#### Links: 
 
 - [Add to server](https://discord.com/api/oauth2/authorize?client_id=710860464183050361&permissions=8&scope=bot)
 - [discord.py documentation](https://discordpy.readthedocs.io/en/latest/index.html)
