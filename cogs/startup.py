@@ -7,9 +7,10 @@ Created on Sat May 16 13:57:23 2020
 """
 
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import random
 import collections.abc
+import math
 
 # Dictionary updating for nested dicts. Goes recursively through the list to get
 # the appropriate key and update each dict.
@@ -28,6 +29,40 @@ class startup(commands.Cog):
         self.bot = bot
         self.initial_player_list = {}
         self.host_message = {}
+        self.terminate_idle_game.start()
+
+    # Checks if a game has been idle for too long (24 hours) and kills it if
+    # so.
+    @tasks.loop(seconds = 86400.0)
+    async def terminate_idle_game(self):
+        print('Checking for idle games...')
+        if self.bot.game_list == {}:
+            pass
+        else:
+            for guild_id, game in self.bot.game_list.items():
+                if game['idle'] == False:
+                    self.bot.game_list[guild_id]['idle'] = True
+                elif game['idle'] == True:
+                    guild = self.bot.get_guild(guild_id)
+                    for key, channelID in self.bot.game_list[guild_id]['channel_ids'].items():
+                        channel = guild.get_channel(channelID)
+                        # Simple check to ensure that the channel exists.
+                        if channel:
+                            # Deletes all channels except for the general channel.
+                            if key != 'general':
+                                try:
+                                    await channel.delete()
+                                except discord.Forbidden:
+                                    print('Idle Terminator: Could not delete {} channel from server: {}'.format(key, guild.id))
+                        else:
+                            print("Idle Terminator: {} channel does not exist in server: {}".format(key, guild.id))
+                        # Clears the memory of the rest of the dict holding the storage 
+                        # for the particular server.
+                    channel = guild.get_channel(self.bot.game_list[guild.id]['channel_ids']['general'])
+                    await channel.send('```Game automatically deleted after sitting idle for too long.```')
+                    # As the last thing done, clears the memory of this game.
+                    self.bot.game_list.pop(guild.id)
+                    print('Idle Terminator: Game killed in server: {}'.format(guild.id))
         
     # Assigns the number of roles for villagers: Will add roles as this grows.
     def assign_roles(self, player_list):
@@ -38,15 +73,24 @@ class startup(commands.Cog):
         # number of players. This bot respects the old rules.
         if num_players > 7:
             num_werewolves = round(num_players / 3)
-            num_villagers = num_players - num_werewolves
+            # i.e. For 10 players there will be 2 medics, 2 detectives, and 3
+            # werewolves, meaning 7/10 will have roles. Otherwise, 5/9 will 
+            # have roles. 
+            num_medic = math.floor(num_players/5)
+            num_detective = math.floor(num_players/5)
+            num_villagers = num_players - (num_werewolves + num_medic + num_detective)
         elif num_players > 4:
             num_werewolves = 2
-            num_villagers = num_players - num_werewolves
+            num_medic = 1
+            num_detective = 1
+            num_villagers = num_players - (num_werewolves + num_medic + num_detective)
         # For games of <4 players, there will be 1 werewolf. Probably not a great
         # games, but I assume someone is going to try to break this.
         else:
-             num_werewolves = 1
-             num_villagers = num_players - num_werewolves
+            num_medic = 0
+            num_detective = 0
+            num_werewolves = 1
+            num_villagers = num_players - num_werewolves
         # This is an array to store all the roles. They're appended on to the 
         # array so that they can be passed through and used. I would have used
         # integers, but this is just more readable and makes for easier maintenance
@@ -57,6 +101,10 @@ class startup(commands.Cog):
             roles.append('Werewolf')
         for i in range(num_villagers):
             roles.append('Villager')
+        for i in range(num_medic):
+            roles.append('Medic')
+        for i in range(num_detective):
+            roles.append('Detective')
         # random.shuffle shuffles the original list, as is done here, since it
         # has a go at the data being pointed at.
         random.shuffle(roles)
@@ -94,7 +142,7 @@ class startup(commands.Cog):
     
     @commands.command(help = "[/werewolf] initialises a game, and brings up a message that lets players opt into the game.")
     async def werewolf(self, ctx):
-        message = await ctx.send('```Click \u2705 to join the game, or \u274e to cancel.\n\nPlayers: 0```')
+        message = await ctx.send('```Click \u2705 to join the game, or \u274e to cancel.\n\nOnce all players have joined, type [/ready] to get sorted into various classes!\n\nPlayers: 0```')
         message_info = {message.guild.id: {"message": message.id}}
         self.host_message.update(message_info)
         self.initial_player_list.update({ctx.guild.id: {}})
@@ -130,12 +178,11 @@ class startup(commands.Cog):
             # Creates a channel for the werewolves to chat in - this channel 
             # will be set so only werewolves can see inside it.
             werewolf_channel = await ctx.guild.create_text_channel("werewolves")
+            medic_channel = await ctx.guild.create_text_channel("medics")
+            detective_channel = await ctx.guild.create_text_channel("detectives")
             i = 0
             playerString = ""
             roles = self.assign_roles(active_player_list)
-
-            # Iterates through all the players in the active player list, and 
-            # applies a specific set of operations to each of them.
             for playerID, player in active_player_list.items():
                 # Gets the user using the player id. I really should have used
                 # this to get the display name all along, but I've now written
@@ -148,31 +195,40 @@ class startup(commands.Cog):
                 # see it. Unfortunately you can't take permissions away from a
                 # channel owner, so this needs a better workaround in a bit.
                 if roles[i] == 'Werewolf':
-                    overwrite = discord.PermissionOverwrite()
-                    overwrite.send_messages = True
-                    overwrite.read_messages = True
-                    overwrite.read_message_history = True
-                    await werewolf_channel.set_permissions(user, 
-                                                           overwrite = overwrite)
+                    await werewolf_channel.set_permissions(user, send_messages = True, read_messages = True, read_message_history = True)
+                    await medic_channel.set_permissions(user, send_messages = False, read_messages = False, read_message_history = False)
+                    await detective_channel.set_permissions(user, send_messages = False, read_messages = False, read_message_history = False)
+                    alignment = 'Werewolf'
+                elif roles[i] == 'Medic':
+                    await werewolf_channel.set_permissions(user, send_messages = False, read_messages = False, read_message_history = False)
+                    await medic_channel.set_permissions(user, send_messages = True, read_messages = True, read_message_history = True)
+                    await detective_channel.set_permissions(user, send_messages = False, read_messages = False, read_message_history = False)
+                    alignment = 'Human'
+                elif roles[i] == 'Detective':
+                    await werewolf_channel.set_permissions(user, send_messages = False, read_messages = False, read_message_history = False)
+                    await medic_channel.set_permissions(user, send_messages = False, read_messages = False, read_message_history = False)
+                    await detective_channel.set_permissions(user, send_messages = True, read_messages = True, read_message_history = True)
+                    alignment = 'Human'
                 else:
-                    overwrite = discord.PermissionOverwrite()
-                    overwrite.send_messages = False
-                    overwrite.read_messages = False
-                    overwrite.read_message_history = False
-                    await werewolf_channel.set_permissions(user, 
-                                                           overwrite = overwrite)
+                    await werewolf_channel.set_permissions(user, send_messages = False, read_messages = False, read_message_history = False)
+                    await medic_channel.set_permissions(user, send_messages = False, read_messages = False, read_message_history = False)
+                    await detective_channel.set_permissions(user, send_messages = False, read_messages = False, read_message_history = False) 
+                    alignment = 'Human'
                 # Updates the role for active players so their roles in the dict
                 # now reflects their in-game roles. Starts up the players as all
                 # alive, and starts a turn counter for each player.
                 player.update({'role': roles[i], 
                                'status': 'alive',
-                               'turns': 0 })
+                               'turns': 0,
+                               'alignment': alignment})
                 # creates a long string with all the players in the game, listed
                 # from 1 to whatever.
                 playerString = "{}{}. {}\n".format(playerString, i+1, player['name'])
                 i = i + 1
             # Updates the game's storage so it holds values for the various 
-            # channels and players.
+            # channels and players. Manually creating this list, so every 
+            # variable can be seen clearly -- Mods will be made to different 
+            # roles as this goes along, so it's fairly important...
             self.bot.game_list.update({ctx.guild.id: {"active": active_player_list, 
                                                       "observer": observer_list,
                                                       "player_numbers": {"alive": len(active_player_list),
@@ -181,14 +237,52 @@ class startup(commands.Cog):
                                                                          "werewolves_live": roles.count('Werewolf'),
                                                                          "villagers_total": roles.count('Villager'),
                                                                          "villagers_live": roles.count('Villager'),
-                                                                         "total": len(active_player_list)},
+                                                                         "medics_total": roles.count('Medic'),
+                                                                         "medics_live": roles.count('Medic'),
+                                                                         "detectives_total": roles.count('Detective'),
+                                                                         "detectives_live": roles.count('Detective'),
+                                                                         "humans_live": (roles.count('Detective') + roles.count('Medic') + roles.count('Villager')),
+                                                                         "total": len(active_player_list),},
+                                                      "turn_complete": {"werewolves": False,
+                                                                        "medics": False,
+                                                                        "detectives": False },
+                                                      "idle": False,
                                                       "day": True,
                                                       "playing": True,
                                                       "turn": 0,
                                                       "channel_ids": {"general": ctx.channel.id,
-                                                                      "werewolf": werewolf_channel.id} }})
+                                                                      "werewolf": werewolf_channel.id,
+                                                                      "medic": medic_channel.id,
+                                                                      "detective": detective_channel.id} }})
             print('Game started in server: {}'.format(ctx.guild.id))
-            await ctx.send('```Game Starting with {} Players and {} Observers!\nPlayers:\n{}\nThere are {} Werewolves and {} Villagers!\nCheck your DMs for your roles, then type [/start] to begin the first night!```'.format(len(roles), len(observer_list), playerString, roles.count('Werewolf'), roles.count('Villager')))
+            initString = "Game is starting with {} Players!\n\nThere are:\n".format(len(roles))
+            # Making pretty text for the player numbers (plural/singular specific)
+            if roles.count('Werewolf') == 1:
+                initString = "{} - 1 Werewolf\n".format(initString)
+            elif roles.count('Werewolf') == 0:
+                initString = initString
+            else:
+                initString = "{} - {} Werewolves\n".format(initString, roles.count('Werewolf'))
+            if roles.count('Villager') == 1:
+                initString = "{} - 1 Villager\n".format(initString)
+            elif roles.count('Villager') == 0:
+                initString = initString
+            else:
+                initString = "{} - {} Villagers\n".format(initString, roles.count('Villager'))
+            if roles.count('Medic') == 1:
+                initString = "{} - 1 Medic\n".format(initString)
+            elif roles.count('Medic') == 0:
+                initString = initString
+            else:
+                initString = "{} - {} Medics\n".format(initString, roles.count('Medic'))
+            if roles.count('Detective') == 1:
+                initString = "{} - 1 Detective\n".format(initString)
+            elif roles.count('Detective') == 0:
+                initString = initString
+            else:
+                initString = "{} - {} Detectives\n".format(initString, roles.count('Detective')) 
+            initString = "```{}\n\nCheck your DMs for your individual roles have a bit of a discussion, and type [/start] when everyone is ready to begin the first night!```".format(initString)
+            await ctx.send(initString)
 
     @commands.command(help = "[/end] terminates the session, and clears the current game from memory. Use this if you're experiencing and issues and would like to clear the game from memory completely.")
     async def end(self, ctx):

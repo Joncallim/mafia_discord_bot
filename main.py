@@ -50,11 +50,12 @@ bot.game_list = {}
 async def on_ready():
     print(f'{bot.user.name} has connected to Discord!')
     for guild in bot.guilds:
-        print(f'Mafia Bot is now connected to {guild.name}.')
+        print(f'Werewolf Bot is now connected to {guild.name}.')
 
 # Clears stuff out from memory - cleans every file in the server. Will add a
 # check to make sure only I can do this in a bit.
 @bot.command(help = "Scrubs memory.")
+@commands.is_owner()
 async def scrub(ctx):
     bot.daytime = True
     bot.host_message_check = {}
@@ -62,24 +63,33 @@ async def scrub(ctx):
     print('Storage has been cleared')
 
 @bot.command(help = "Loads extensions.")
+@commands.is_owner()
 async def load(ctx, extension):
     bot.load_extension(f"cogs.{extension}")
     print('{} has now been loaded.'.format(extension))
     
 @bot.command(help = "Unloads extensions.")
+@commands.is_owner()
 async def unload(ctx, extension):
     bot.unload_extension(f"cogs.{extension}")
     print('{} has now been unloaded.'.format(extension))
     
-@bot.command(help = "Unloads extensions.")
+@bot.command(help = "Reloads all extensions.")
+@commands.is_owner()
 async def reload(ctx, extension):
     bot.unload_extension(f"cogs.{extension}")
     bot.load_extension(f"cogs.{extension}")
     print('{} has now been reloaded.'.format(extension))
-    
+
 @bot.command(name='status', help='Checks if bot is active')
 async def check_status(ctx):
-    await ctx.send("```Mafia Bot is active.```")
+    await ctx.send("```Werewolf Bot is active.```")
+    
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.errors.NotOwner):
+        await ctx.send('```You do not have permission to execute that command, {}.```'.format(ctx.author.display_name))
+        print(ctx.author.id, " attempted to execute an illegal command.")
 
 
 # This just goes through all the .py files in the cogs directory and loads them
