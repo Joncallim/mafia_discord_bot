@@ -26,7 +26,7 @@ nest_asyncio.apply()
 with open('../werewolf_secret/bot_codes.json', 'r') as file:
     codes = json.load(file)
 
-TOKEN = codes.get('token-test')
+TOKEN = codes.get('token')
 
 
 bot = commands.Bot(command_prefix = '/')
