@@ -13,7 +13,9 @@ sys.path.append('../')
 import discord
 import json
 
-
+from ww_text import AdminTextGenerator, ErrorTextGenerator, VoteTextGenerator, Narration
+from RoleClasses import WerewolfClass, MedicClass, DetectiveClass
+from PlayerChecks import PlayerChecks
 from discord.ext import commands
 import os
 
@@ -24,13 +26,30 @@ nest_asyncio.apply()
 with open('../werewolf_secret/bot_codes.json', 'r') as file:
     codes = json.load(file)
 
-TOKEN = codes.get('token')
+TOKEN = codes.get('token-test')
 
 
 bot = commands.Bot(command_prefix = '/')
 
 bot.host_message_check = {}
 bot.game_list = {}
+bot.colours = {"admin": 0xCCD1D1,
+               "day": 0xF7DC6F,
+               "night": 0x154360,
+               "werewolf": 0xE74C3C,
+               "villager": 0x7DCEA0,
+               "detective": 0xA569BD,
+               "medic": 0xDC7633}
+
+bot.AdminText = AdminTextGenerator()
+bot.ErrorText = ErrorTextGenerator()
+bot.VoteText = VoteTextGenerator()
+bot.Narrator = Narration()
+
+bot.PlayerChecks = PlayerChecks(bot)
+bot.WerewolfClass = WerewolfClass(bot)
+bot.MedicClass = MedicClass(bot)
+bot.DetectiveClass = DetectiveClass(bot)
 
 # bot.test_player_list = {111: {'role': 'not_playing', 'name': 'test_player_1'}, 
 #                         222: {'role': 'not_playing', 'name': 'test_player_2'}, 
@@ -83,14 +102,19 @@ async def reload(ctx, extension):
 
 @bot.command(name='status', help='Checks if bot is active')
 async def check_status(ctx):
-    await ctx.send("```Werewolf Bot is active.```")
+    await ctx.send(embed = bot.AdminText.Status(ctx.guild.name))
     
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.errors.NotOwner):
-        await ctx.send('```You do not have permission to execute that command, {}.```'.format(ctx.author.display_name))
+        await ctx.send(embed = bot.AdminText.NoPermission(ctx.author.display_name))
         print(ctx.author.id, " attempted to execute an illegal command.")
 
+@bot.command(name = 'test')
+async def test(ctx):
+    print('no')
+    if await bot.PlayerChecks.CheckPlayer(ctx):
+        print('yes')
 
 # This just goes through all the .py files in the cogs directory and loads them
 # at the first start of this bot.

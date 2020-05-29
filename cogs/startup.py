@@ -59,7 +59,10 @@ class startup(commands.Cog):
                         # Clears the memory of the rest of the dict holding the storage 
                         # for the particular server.
                     channel = guild.get_channel(self.bot.game_list[guild.id]['channel_ids']['general'])
-                    await channel.send('```Game automatically deleted after sitting idle for too long.```')
+                    embed = discord.Embed(title="Game deleted from server!",
+                                          description="The game in this server has been idle for too long, and has been cleared from the system's memory.",
+                                          color=self.bot.colours['admin'])
+                    await channel.send(embed = embed)
                     # As the last thing done, clears the memory of this game.
                     self.bot.game_list.pop(guild.id)
                     print('Idle Terminator: Game killed in server: {}'.format(guild.id))
@@ -71,26 +74,15 @@ class startup(commands.Cog):
         # It is recommended by Andrew Plotkin that there are exactly 2 mafioso
         # (or werewolves), but in the original Davidoff rules there are 1/3 the
         # number of players. This bot respects the old rules.
-        if num_players > 7:
-            num_werewolves = round(num_players / 3)
-            # i.e. For 10 players there will be 2 medics, 2 detectives, and 3
-            # werewolves, meaning 7/10 will have roles. Otherwise, 5/9 will 
-            # have roles. 
-            num_medic = math.floor(num_players/5)
-            num_detective = math.floor(num_players/5)
-            num_villagers = num_players - (num_werewolves + num_medic + num_detective)
-        elif num_players > 4:
-            num_werewolves = 2
-            num_medic = 1
+        num_werewolves = round(num_players / 3)
+        # i.e. For 10 players there will be 2 medics, 2 detectives, and 3
+        # werewolves, meaning 7/10 will have roles. Otherwise, 5/9 will 
+        # have roles. 
+        num_medic = math.floor(num_players/5)
+        num_detective = math.floor(num_players/5)
+        if num_detective == 0:
             num_detective = 1
-            num_villagers = num_players - (num_werewolves + num_medic + num_detective)
-        # For games of <4 players, there will be 1 werewolf. Probably not a great
-        # games, but I assume someone is going to try to break this.
-        else:
-            num_medic = 0
-            num_detective = 0
-            num_werewolves = 1
-            num_villagers = num_players - num_werewolves
+        num_villagers = num_players - (num_werewolves + num_medic + num_detective)
         # This is an array to store all the roles. They're appended on to the 
         # array so that they can be passed through and used. I would have used
         # integers, but this is just more readable and makes for easier maintenance
@@ -137,12 +129,12 @@ class startup(commands.Cog):
                         self.initial_player_list[react.message.guild.id].update({person.id: {"role": "not_playing", 
                                                                                              "name": person.display_name}})
                     numPlayers = sum(value['role'] == "player" for value in self.initial_player_list[react.message.guild.id].values())
-                    await react.message.edit(content = '```Click \u2705 to join the game, or \u274e to cancel.\n\nPlayers: {}```'.format(numPlayers))
+                    await react.message.edit(embed = self.bot.AdminText.StartUp(react.message.guild.name, numPlayers))
                     pass
     
     @commands.command(help = "[/werewolf] initialises a game, and brings up a message that lets players opt into the game.")
     async def werewolf(self, ctx):
-        message = await ctx.send('```Click \u2705 to join the game, or \u274e to cancel.\n\nOnce all players have joined, type [/ready] to get sorted into various classes!\n\nPlayers: 0```')
+        message = await ctx.send(embed = self.bot.AdminText.StartUp(ctx.guild.name, 0))
         message_info = {message.guild.id: {"message": message.id}}
         self.host_message.update(message_info)
         self.initial_player_list.update({ctx.guild.id: {}})
@@ -162,7 +154,7 @@ class startup(commands.Cog):
         # Quick check to see if a dict has actually been popped, or if no dict
         # exists in the database.
         if all_player_list == None:
-            await ctx.send("```You haven't started the Werewolf bot! Type '/werewolf' to get started!```")
+            await ctx.send(embed = self.bot.ErrorText.NoGame(ctx.guild.name))
             pass
         else:
             active_player_list = {}
@@ -189,7 +181,6 @@ class startup(commands.Cog):
                 # the code to store the display name too.
                 user = ctx.guild.get_member(playerID)
                 self.bot.dm_id = user
-                await user.send('```Your role for the game in {} is "{}!"```'.format(ctx.guild.name, roles[i]))
                 # Sets permissions for the particular user in specific channels.
                 # If you're not meant to be in a particular channel, you can't
                 # see it. Unfortunately you can't take permissions away from a
@@ -221,6 +212,9 @@ class startup(commands.Cog):
                                'status': 'alive',
                                'turns': 0,
                                'alignment': alignment})
+                # Sends a formatted message to the player, specifying their role
+                # and alignment in the game.
+                await user.send(embed = self.bot.AdminText.PlayerPersonalInfo(ctx.guild.name, roles[i], alignment))
                 # creates a long string with all the players in the game, listed
                 # from 1 to whatever.
                 playerString = "{}{}. {}\n".format(playerString, i+1, player['name'])
@@ -255,34 +249,7 @@ class startup(commands.Cog):
                                                                       "medic": medic_channel.id,
                                                                       "detective": detective_channel.id} }})
             print('Game started in server: {}'.format(ctx.guild.id))
-            initString = "Game is starting with {} Players!\n\nThere are:\n".format(len(roles))
-            # Making pretty text for the player numbers (plural/singular specific)
-            if roles.count('Werewolf') == 1:
-                initString = "{} - 1 Werewolf\n".format(initString)
-            elif roles.count('Werewolf') == 0:
-                initString = initString
-            else:
-                initString = "{} - {} Werewolves\n".format(initString, roles.count('Werewolf'))
-            if roles.count('Villager') == 1:
-                initString = "{} - 1 Villager\n".format(initString)
-            elif roles.count('Villager') == 0:
-                initString = initString
-            else:
-                initString = "{} - {} Villagers\n".format(initString, roles.count('Villager'))
-            if roles.count('Medic') == 1:
-                initString = "{} - 1 Medic\n".format(initString)
-            elif roles.count('Medic') == 0:
-                initString = initString
-            else:
-                initString = "{} - {} Medics\n".format(initString, roles.count('Medic'))
-            if roles.count('Detective') == 1:
-                initString = "{} - 1 Detective\n".format(initString)
-            elif roles.count('Detective') == 0:
-                initString = initString
-            else:
-                initString = "{} - {} Detectives\n".format(initString, roles.count('Detective')) 
-            initString = "```{}\n\nCheck your DMs for your individual roles have a bit of a discussion, and type [/start] when everyone is ready to begin the first night!```".format(initString)
-            await ctx.send(initString)
+            await ctx.send(embed = self.bot.AdminText.GameStarting(ctx.guild.name, roles, playerString))
 
     @commands.command(help = "[/end] terminates the session, and clears the current game from memory. Use this if you're experiencing and issues and would like to clear the game from memory completely.")
     async def end(self, ctx):
@@ -304,9 +271,11 @@ class startup(commands.Cog):
                 # Clears the memory of the rest of the dict holding the storage 
                 # for the particular server.
             channel = ctx.guild.get_channel(self.bot.game_list[ctx.guild.id]['channel_ids']['general'])
-            await channel.send('```Memory cleared of this game```')
+            await channel.send(embed = self.bot.AdminText.GameDeleted(ctx.guild.name))
             # As the last thing done, clears the memory of this game.
             self.bot.game_list.pop(ctx.guild.id)
+            if ctx.guild.id in self.bot.DetectiveClass.Investigations:
+                self.bot.DetectiveClass.Investigations.pop(ctx.guild.id)
             print('Game terminated in server: {}'.format(ctx.guild.id))
         else:
             print("No Storage Found")
