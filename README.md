@@ -1,9 +1,12 @@
-# Werewolf Bot
-## Written for Discord in discord.py
+# Jacob 
+## A Werewolf Bot Written for Discord in discord.py
+### Version 0.9
 
 ---
 #### Yet Another Werewolf Bot...
 I decided that there weren't enough Werewolf Bots out there, so I've made my own Discord bot for werewolf. If you just want to jump in, you can add it to a server [here](https://discord.com/api/oauth2/authorize?client_id=710860464183050361&permissions=8&scope=bot).
+
+At the behest of a good friend, I've had to name my bot - apparently "werewolf-discord-bot-0.845b" didn't cut it. So, here's Jacob, a brilliant narrator who will help you and your friends play a game of werewolf!
 
 I've meant for this game to be played by a group of friends on video/voice chat, so you should really think about adding your own stories to the ones that have been crafted here! Thanks to the very talented Beth Davis ([Click here to follow her on Instagram!!!](https://www.instagram.com/beth.wtf15/?hl=en)), there are now some new bits of narration included for the Werewolf kill/no-kill/save sequences!
 
