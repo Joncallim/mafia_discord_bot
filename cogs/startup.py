@@ -289,7 +289,7 @@ class startup(commands.Cog):
 
     @commands.command(help = "[/end] terminates the session, and clears the current game from memory. Use this if you're experiencing and issues and would like to clear the game from memory completely.")
     async def end(self, ctx):
-        if await self.PlayerChecks.IsValidPlayer(ctx):
+        if await self.bot.PlayerChecks.IsValidPlayer(ctx):
             # For the different channel IDs that were created by the bot, goes
             # through them one at a time and deletes all of them.
             for key, channelID in self.bot.game_list[ctx.guild.id]['channel_ids'].items():
