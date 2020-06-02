@@ -54,7 +54,11 @@ class PlayerChecks():
         if not self.bot.game_list[ctx.guild.id]["day"]:
             await ctx.send(embed = self.bot.ErrorText.GenericError())
             return False
-        # Check 2: Must have a valid Nomination. These only go through if the
+        # Check 2: Must be inside the actual "general" channel for the game.
+        if ctx.channel.id != self.bot.game_list[ctx.guild.id]["channel_ids"]["general"]:
+            await ctx.send(embed = self.bot.ErrorText.WrongChannel())
+            return False
+        # Check 3: Must have a valid Nomination. These only go through if the
         # earlier check passes, 
         else:
             if len(Nomination) == 1:

@@ -30,6 +30,9 @@ class startup(commands.Cog):
         self.initial_player_list = {}
         self.host_message = {}
         self.terminate_idle_game.start()
+        self.NoPermission = discord.PermissionOverwrite()
+        self.NoPermission.send_messages = False
+        self.NoPermission.read_messages = False
 
     # Checks if a game has been idle for too long (24 hours) and kills it if
     # so.
@@ -65,7 +68,7 @@ class startup(commands.Cog):
                     await channel.send(embed = embed)
                     # As the last thing done, clears the memory of this game.
                     self.bot.game_list.pop(guild.id)
-                    print('Idle Terminator: Game killed in server: {}'.format(guild.id))
+                    print('Idle Terminator: Game terminated in server: {}, id: {}'.format(guild.name, guild.id))
         
     # Assigns the number of roles for villagers: Will add roles as this grows.
     def assign_roles(self, player_list):
@@ -140,9 +143,28 @@ class startup(commands.Cog):
         self.initial_player_list.update({ctx.guild.id: {}})
         await message.add_reaction('\u2705')
         await message.add_reaction('\u274e')
+        
+        
+    async def new_channelText(self, ctx, channel_name):
+        channel = await ctx.guild.create_text_channel(channel_name)
+        # overwrite = discord.PermissionOverwrite()
+        # overwrite.send_messages = False
+        # overwrite.read_messages = False
+        # # overwrite = Permissions()
+        # # overwrite.none()
+        print(self.NoPermission)
+        for member in ctx.guild.members:
+            if not member.bot:
+                print(member)
+                await channel.set_permissions(member, overwrite = self.NoPermission)#send_messages = False, read_messages = False, read_message_history = False)
+        return channel
 
     @commands.command(help = "[/ready] starts a game once all players who are participating in the game are ready to play.")
     async def ready(self, ctx):
+        InitialEmbed = discord.Embed(title="Game Starting Up!",
+                                     description="Please wait while I allocate resources.",
+                                     color = 0xFF0000)
+        await ctx.send(embed = InitialEmbed)
         # Removes the entry for this server from the storage dictionary - the
         # start message won't be needed any more. Sets a default value in case
         # there is no item.
@@ -169,9 +191,12 @@ class startup(commands.Cog):
                     observer_list.update({playerID: player})
             # Creates a channel for the werewolves to chat in - this channel 
             # will be set so only werewolves can see inside it.
-            werewolf_channel = await ctx.guild.create_text_channel("werewolves")
-            medic_channel = await ctx.guild.create_text_channel("medics")
-            detective_channel = await ctx.guild.create_text_channel("detectives")
+            # werewolf_channel = await ctx.guild.create_text_channel("werewolves")
+            werewolf_channel = await self.bot.WWChannels.NewTextChannel(ctx, "werewolves")
+            medic_channel = await self.bot.WWChannels.NewTextChannel(ctx, "medics")
+            detective_channel = await self.bot.WWChannels.NewTextChannel(ctx, "detectives")
+            general_text = await self.bot.WWChannels.NewTextChannel(ctx, "village-ville", Public = True)
+            general_voice = await self.bot.WWChannels.NewVoiceChannel(ctx, "village-ville")
             i = 0
             playerString = ""
             roles = self.assign_roles(active_player_list)
@@ -185,25 +210,21 @@ class startup(commands.Cog):
                 # If you're not meant to be in a particular channel, you can't
                 # see it. Unfortunately you can't take permissions away from a
                 # channel owner, so this needs a better workaround in a bit.
+                try:
+                    await general_text.set_permissions(user, overwrite = self.bot.WWChannels.GetPermission("textOK") )
+                    await general_voice.set_permissions(user, overwrite = self.bot.WWChannels.GetPermission("speak") )
+                except discord.Forbidden as Error:
+                    print("Failed to set permissions in {} due to {}".format(ctx.guild.name, Error))
                 if roles[i] == 'Werewolf':
-                    await werewolf_channel.set_permissions(user, send_messages = True, read_messages = True, read_message_history = True)
-                    await medic_channel.set_permissions(user, send_messages = False, read_messages = False, read_message_history = False)
-                    await detective_channel.set_permissions(user, send_messages = False, read_messages = False, read_message_history = False)
+                    await werewolf_channel.set_permissions(user, overwrite = self.bot.WWChannels.GetPermission("textOK") )
                     alignment = 'Werewolf'
                 elif roles[i] == 'Medic':
-                    await werewolf_channel.set_permissions(user, send_messages = False, read_messages = False, read_message_history = False)
-                    await medic_channel.set_permissions(user, send_messages = True, read_messages = True, read_message_history = True)
-                    await detective_channel.set_permissions(user, send_messages = False, read_messages = False, read_message_history = False)
+                    await medic_channel.set_permissions(user, overwrite = self.bot.WWChannels.GetPermission("textOK") )
                     alignment = 'Human'
                 elif roles[i] == 'Detective':
-                    await werewolf_channel.set_permissions(user, send_messages = False, read_messages = False, read_message_history = False)
-                    await medic_channel.set_permissions(user, send_messages = False, read_messages = False, read_message_history = False)
-                    await detective_channel.set_permissions(user, send_messages = True, read_messages = True, read_message_history = True)
+                    await detective_channel.set_permissions(user, overwrite = self.bot.WWChannels.GetPermission("textOK") )
                     alignment = 'Human'
                 else:
-                    await werewolf_channel.set_permissions(user, send_messages = False, read_messages = False, read_message_history = False)
-                    await medic_channel.set_permissions(user, send_messages = False, read_messages = False, read_message_history = False)
-                    await detective_channel.set_permissions(user, send_messages = False, read_messages = False, read_message_history = False) 
                     alignment = 'Human'
                 # Updates the role for active players so their roles in the dict
                 # now reflects their in-game roles. Starts up the players as all
@@ -244,16 +265,31 @@ class startup(commands.Cog):
                                                       "day": True,
                                                       "playing": True,
                                                       "turn": 0,
-                                                      "channel_ids": {"general": ctx.channel.id,
+                                                      "channel_ids": {"admin": ctx.channel.id,
+                                                                      "general": general_text.id,
+                                                                      "general-voice": general_voice.id,
                                                                       "werewolf": werewolf_channel.id,
                                                                       "medic": medic_channel.id,
                                                                       "detective": detective_channel.id} }})
-            print('Game started in server: {}'.format(ctx.guild.id))
-            await ctx.send(embed = self.bot.AdminText.GameStarting(ctx.guild.name, roles, playerString))
+            print('Game started in server: {}, id: {}'.format(ctx.guild.name, ctx.guild.id))
+            TextInvite = await general_text.create_invite()
+            TextInviteEmbed = discord.Embed(name="Join the Village-Ville Text Channel!",
+                                            description="Click on the 'Joined' button to go straight to the text channel, where the rest of the game will be played.",
+                                            color=0xFF0000)
+            VoiceInvite = await general_voice.create_invite()
+            VoiceInviteEmbed = discord.Embed(name="Join the Village-Ville Voice Chat!",
+                                             description="Click on the 'Join Voice' button to go straight to the voice channel.",
+                                             color=0xFF0000)
+            try:
+                await ctx.send(VoiceInvite, embed = VoiceInviteEmbed)
+                await ctx.send(TextInvite, embed = TextInviteEmbed)
+                await general_text.send(embed = self.bot.AdminText.GameStarting(ctx.guild.name, roles, playerString))
+            except discord.Forbidden as Error:
+                print("Could not send startup message in {} due to {}".format(ctx.guild.name, Error))
 
     @commands.command(help = "[/end] terminates the session, and clears the current game from memory. Use this if you're experiencing and issues and would like to clear the game from memory completely.")
     async def end(self, ctx):
-        if ctx.guild.id in self.bot.game_list.keys():
+        if await self.PlayerChecks.IsValidPlayer(ctx):
             # For the different channel IDs that were created by the bot, goes
             # through them one at a time and deletes all of them.
             for key, channelID in self.bot.game_list[ctx.guild.id]['channel_ids'].items():
@@ -261,7 +297,7 @@ class startup(commands.Cog):
                 # Simple check to ensure that the channel exists.
                 if channel:
                     # Deletes all channels except for the general channel.
-                    if key != 'general':
+                    if key != 'admin':
                         try:
                             await channel.delete()
                         except discord.Forbidden:
@@ -270,15 +306,14 @@ class startup(commands.Cog):
                     print("{} channel does not exist in server: {}".format(key, ctx.guild.id))
                 # Clears the memory of the rest of the dict holding the storage 
                 # for the particular server.
-            channel = ctx.guild.get_channel(self.bot.game_list[ctx.guild.id]['channel_ids']['general'])
+            channel = ctx.guild.get_channel(self.bot.game_list[ctx.guild.id]['channel_ids']['admin'])
             await channel.send(embed = self.bot.AdminText.GameDeleted(ctx.guild.name))
             # As the last thing done, clears the memory of this game.
             self.bot.game_list.pop(ctx.guild.id)
             if ctx.guild.id in self.bot.DetectiveClass.Investigations:
                 self.bot.DetectiveClass.Investigations.pop(ctx.guild.id)
-            print('Game terminated in server: {}'.format(ctx.guild.id))
-        else:
-            print("No Storage Found")
+            print('Game terminated in server: {}, id: {}'.format(ctx.guild.name, ctx.guild.id))
+
         
 def setup(bot):
     bot.add_cog(startup(bot))

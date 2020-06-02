@@ -56,7 +56,7 @@ class turns(commands.Cog):
                         # Kills the player and returns two booleans: The first tells
                         # you if it's a game-ending kill, the second tells you who's
                         # victory it is. A small flaw is that 
-                        game_end, werewolf_victory = self.kill_player(guild_id, victim_id)
+                        game_end, werewolf_victory = await self.kill_player(guild_id, victim_id)
                         # Saves the game-ending values here. The final player killed 
                         # could be a werewolf, for example, and that wouldn't trigger
                         # the game ending conditions the same way.
@@ -73,7 +73,7 @@ class turns(commands.Cog):
                     # Kills the player and returns two booleans: The first tells
                     # you if it's a game-ending kill, the second tells you who's
                     # victory it is. A small flaw is that 
-                    game_end, werewolf_victory = self.kill_player(guild_id, victim_id)
+                    game_end, werewolf_victory = await self.kill_player(guild_id, victim_id)
                     # Saves the game-ending values here. The final player killed 
                     # could be a werewolf, for example, and that wouldn't trigger
                     # the game ending conditions the same way.
@@ -133,7 +133,7 @@ class turns(commands.Cog):
     # game.    
     async def game_end(self, guild_id, werewolf_victory = True):
         guild = self.bot.get_guild(guild_id)
-        general_channel = guild.get_channel(self.bot.game_list[guild_id]["channel_ids"]["general"])
+        general_channel = guild.get_channel(self.bot.game_list[guild_id]["channel_ids"]["admin"])
         await general_channel.send(embed = self.bot.AdminText.Victory(self.bot.game_list[guild_id], werewolf_victory))
         # Now purging the game from memory.
         for key, channelID in self.bot.game_list[guild_id]['channel_ids'].items():
@@ -141,7 +141,7 @@ class turns(commands.Cog):
             # Simple check to ensure that the channel exists.
             if channel:
                 # Deletes all channels except for the general channel.
-                if key != 'general':
+                if key != 'admin':
                     try:
                         await channel.delete()
                     except discord.Forbidden:
@@ -152,13 +152,14 @@ class turns(commands.Cog):
         self.bot.game_list.pop(guild_id)
         if self.bot.DetectiveClass.Investigations[guild_id]:
                 self.bot.DetectiveClass.Investigations.pop(guild_id)
-        print('Game terminated in server: {}'.format(guild_id))
+        print('Game completed in server: {}, id: {}'.format(guild.name, guild.id))
     
     # Return True for game ending, False for game continuing. Second condition
     # is the werewolf victory. True means the werewolves win.
-    def kill_player(self, guild_id, player_id):
+    async def kill_player(self, guild_id, player_id):
         # Updates the player's status to dead, and changes the counters
         # that store the number of live and dead players.
+        await self.bot.WWChannels.Kill(guild_id, player_id)
         self.bot.game_list[guild_id]["active"][player_id]["status"] = 'dead'
         self.bot.game_list[guild_id]["active"][player_id]["turns"] = self.bot.game_list[guild_id]['turn']
         self.bot.game_list[guild_id]["player_numbers"]["alive"] = self.bot.game_list[guild_id]["player_numbers"]["alive"] - 1
@@ -229,10 +230,13 @@ class turns(commands.Cog):
         # Getting the actual embedded text for each channel. The channels
         # are retrieved earlier to prevent some weird ASYNCIO bug...
         GeneralEmbed, WerewolfEmbed, MedicEmbed, DetectiveEmbed = self.bot.VoteText.NightPrompts(live_target_list, False)
-        await GeneralChannel.send( embed = GeneralEmbed )
-        await WerewolfChannel.send( embed = WerewolfEmbed )
-        await MedicChannel.send( embed = MedicEmbed )
-        await DetectiveChannel.send( embed = DetectiveEmbed )
+        try:
+            await GeneralChannel.send( embed = GeneralEmbed )
+            await WerewolfChannel.send( embed = WerewolfEmbed )
+            await MedicChannel.send( embed = MedicEmbed )
+            await DetectiveChannel.send( embed = DetectiveEmbed )
+        except discord.Forbidden as Error:
+            print("Failed to send message in {} due to {}".format(guild.name, Error))
         pass
     
     def set_day(self, guild_id):
@@ -328,7 +332,7 @@ class turns(commands.Cog):
             await general_channel.send( embed = embed )
             if Death:
                 # Kills player - Can end game here if needed!
-                game_end, werewolf_victory = self.kill_player(guild_id, PlayerID)
+                game_end, werewolf_victory = await self.kill_player(guild_id, PlayerID)
                 # Only one iteration of this will happen, so no need to save the
                 # value of game_end earlier.
                 if game_end:
@@ -377,10 +381,13 @@ class turns(commands.Cog):
             # Getting the actual embedded text for each channel. The channels
             # are retrieved earlier to prevent some weird ASYNCIO bug...
             GeneralEmbed, WerewolfEmbed, MedicEmbed, DetectiveEmbed = self.bot.VoteText.NightPrompts(live_target_list, True)
-            await GeneralChannel.send( embed = GeneralEmbed )
-            await WerewolfChannel.send( embed = WerewolfEmbed )
-            await MedicChannel.send( embed = MedicEmbed )
-            await DetectiveChannel.send( embed = DetectiveEmbed )
+            try:
+                await GeneralChannel.send( embed = GeneralEmbed )
+                await WerewolfChannel.send( embed = WerewolfEmbed )
+                await MedicChannel.send( embed = MedicEmbed )
+                await DetectiveChannel.send( embed = DetectiveEmbed )
+            except discord.Forbidden as Error:
+                print("Could not send message in {} due to {}".format(ctx.guild.name, Error))
         
     @commands.Cog.listener()
     async def on_reaction_add(self, react: discord.Reaction, person: discord.User):

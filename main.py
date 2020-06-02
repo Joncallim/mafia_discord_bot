@@ -14,6 +14,7 @@ import discord
 import json
 
 from ww_text import AdminTextGenerator, ErrorTextGenerator, VoteTextGenerator, Narration
+from ww_permissions import WerewolfPermissions
 from RoleClasses import WerewolfClass, MedicClass, DetectiveClass
 from PlayerChecks import PlayerChecks
 from discord.ext import commands
@@ -26,7 +27,7 @@ nest_asyncio.apply()
 with open('../werewolf_secret/bot_codes.json', 'r') as file:
     codes = json.load(file)
 
-TOKEN = codes.get('token')
+TOKEN = codes.get('token-test')
 
 
 bot = commands.Bot(command_prefix = '/')
@@ -50,6 +51,7 @@ bot.PlayerChecks = PlayerChecks(bot)
 bot.WerewolfClass = WerewolfClass(bot)
 bot.MedicClass = MedicClass(bot)
 bot.DetectiveClass = DetectiveClass(bot)
+bot.WWChannels = WerewolfPermissions(bot)
 
 # bot.test_player_list = {111: {'role': 'not_playing', 'name': 'test_player_1'}, 
 #                         222: {'role': 'not_playing', 'name': 'test_player_2'}, 
@@ -99,6 +101,23 @@ async def reload(ctx, extension):
     bot.unload_extension(f"cogs.{extension}")
     bot.load_extension(f"cogs.{extension}")
     print('{} has now been reloaded.'.format(extension))
+    
+@bot.command(help = "Displays a message for all active servers to see.")
+@commands.is_owner()
+async def echo(ctx, *args):
+    if len(args) == 0:
+        print("No input found for echo")
+    else:
+        embed = discord.Embed(title="Admin Message",
+                              description=" ".join(args),
+                              color=0xFF0000)
+        # Iterating through all the guilds this bot is connected to, then all 
+        # the channels it is connected to. Sends this prompt message in the 
+        # general channel.
+        for guild in bot.guilds:
+            for channel in guild.channels:
+                if channel.name == "general":
+                    await channel.send(embed = embed)
 
 @bot.command(name='status', help='Checks if bot is active')
 async def check_status(ctx):
@@ -109,12 +128,6 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.errors.NotOwner):
         await ctx.send(embed = bot.AdminText.NoPermission(ctx.author.display_name))
         print(ctx.author.id, " attempted to execute an illegal command.")
-
-@bot.command(name = 'test')
-async def test(ctx):
-    print('no')
-    if await bot.PlayerChecks.CheckPlayer(ctx):
-        print('yes')
 
 # This just goes through all the .py files in the cogs directory and loads them
 # at the first start of this bot.

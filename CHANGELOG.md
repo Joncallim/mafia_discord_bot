@@ -1,6 +1,21 @@
 # Werewolf Bot Changelog
 ## Written for Discord in discord.py
 ---
+### 2 June 2020:
+
+- Added:
+	- `/echo` command to echo admin messages across all "general" channels that the bot has been added to. Useful to push updates and all.
+	- Jacob will now create a general Village-ville voice and text channel, and invite all players to it. These are set to read-only by default.
+	- New auto-mute incorporated. Jacob will mute all non-active players and dead players. Non-active players will not get to see the specialised chats, but dead players will have the other specialised chats revealed on death (Possible fix for next push).
+
+- Removed:
+	- Test command that I left in the code by accident.
+
+- Changes:
+	- Changed some message sends to `try/except` to catch any exceptions that might show up. Should not happen, but it's in there just in case.
+	- Now sends a message on death so you know that you've been muted.
+
+---
 ### 30 May 2020:
 
 This update was mostly changing the text format to embedded, and fixing the 3 million bugs that appeared because of that.
