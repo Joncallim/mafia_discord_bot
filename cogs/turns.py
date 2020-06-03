@@ -434,7 +434,7 @@ class turns(commands.Cog):
                         await react.remove(person)
                         # Updates the screen to show how many votes have been
                         # cast, and how many should be cast in total.
-                        total_votes = len(kill_list) + len(no_kill_list)
+                        total_votes = len(self.kill_message[guildID]['vote_no_kill']) + len(self.kill_message[guildID]['vote_kill'])
                         await react.message.edit( embed = self.bot.VoteText.EditNomination(guildID, total_votes) )
                 self.kill_message[guildID].update({"vote_kill": kill_list})
                 self.kill_message[guildID].update({"vote_no_kill": no_kill_list})
